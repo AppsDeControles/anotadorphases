@@ -47,7 +47,7 @@ button{cursor:pointer}
 .top svg{flex:none}
 .top h1{font-family:var(--display);font-weight:800;font-size:30px;letter-spacing:.01em;margin:0;line-height:1;text-transform:uppercase}
 .tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px}
-.tabs button{flex:1;border:0;background:none;padding:10px;border-radius:9px;font-weight:600;color:var(--muted)}
+.tabs button{flex:1;white-space:nowrap;font-size:15px;border:0;background:none;padding:10px;border-radius:9px;font-weight:600;color:var(--muted)}
 .tabs button[aria-current="true"]{background:var(--felt);color:var(--felt-ink)}
 
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 16px;font-weight:600;min-height:48px}
@@ -123,10 +123,11 @@ td .edit{border:0;background:none;color:var(--felt);font-weight:700;padding:4px 
 .phl li:first-child{border-top:0}
 .phl b{font-family:var(--display);font-size:22px;width:24px;color:var(--muted);flex:none}
 .phl span{flex:1;font-weight:600}
-.ro [data-act]:not([data-act="go"]):not([data-act="open"]),.ro form[data-form],.ro .acts,.ro .card .row{display:none !important}
+.ro [data-act]:not([data-act="go"]):not([data-act="set"]),.ro form[data-form],.ro .acts,.ro .card .row{display:none !important}
 a.btn{display:block;text-align:center;text-decoration:none;color:inherit}
 a.btn.wa{border-color:var(--felt);color:var(--felt)}
 .mine{font-family:var(--display);font-weight:800;font-size:30px;line-height:1.05;text-transform:uppercase}
+.chip .dot{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid var(--surface);margin-right:7px;vertical-align:-2px}
 .center{align-items:center}
 .center .sheet{border-radius:20px;margin:16px}
 @media (prefers-reduced-motion:no-preference){ .sheet{animation:up .18s ease-out} @keyframes up{from{transform:translateY(16px)}to{transform:none}} }
@@ -235,8 +236,8 @@ function connect(){
     DB.ref('partidas/'+VIEW+'/data').on('value',function(snap){
       clearTimeout(timer);SYNC='live';
       var g=null;try{g=JSON.parse(snap.val())}catch(e){}
-      if(g&&Array.isArray(g.players)&&g.players.length&&Array.isArray(g.rounds)){g.id=VIEW;S={players:[],games:[g]};V.gameId=VIEW;V.screen='game'}
-      else{S={players:[],games:[]};V.screen='home'}
+      if(g&&Array.isArray(g.players)&&g.players.length&&Array.isArray(g.rounds)){g.id=VIEW;S={players:[],games:[g]};V.gameId=VIEW;if(V.screen!=='settings')V.screen='game'}
+      else{S={players:[],games:[]};if(V.screen!=='settings')V.screen='home'}
       render();
     },function(){clearTimeout(timer);SYNC='err';if(!S)S={players:[],games:[]};render()});
     return;
@@ -290,10 +291,54 @@ function rule(g){
 }
 
 /* ---------- vistas ---------- */
+var ACC={
+  verde:{n:'Verde',l:['#1d6a49','#ffffff'],d:['#43b281','#06140d']},
+  rojo:{n:'Rojo',l:['#c62828','#ffffff'],d:['#ef6b6b','#1a0505']},
+  azul:{n:'Azul',l:['#1f5fb8','#ffffff'],d:['#6aa5f5','#04101f']},
+  morado:{n:'Morado',l:['#6a3fb5','#ffffff'],d:['#b091f0','#12072a']},
+  naranja:{n:'Naranja',l:['#c2560c','#ffffff'],d:['#f59a4a','#1f0e00']},
+  rosa:{n:'Rosa',l:['#c2327a','#ffffff'],d:['#f07fb5','#24061a']}
+};
+var CKEY='anotador-ajustes-v1',CFG={theme:'auto',accent:'verde',size:'n',wake:false,pmode:'orig'},WL=null;
+try{var cj=JSON.parse(localStorage.getItem(CKEY)||'{}');for(var ck in CFG)if(typeof cj[ck]===typeof CFG[ck])CFG[ck]=cj[ck]}catch(e){}
+if(!ACC[CFG.accent])CFG.accent='verde';
+var MQ=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+function isDark(){return CFG.theme==='dark'||(CFG.theme!=='light'&&MQ&&MQ.matches)}
+function applySettings(){
+  var el=document.documentElement,a=ACC[CFG.accent],c=isDark()?a.d:a.l;
+  if(CFG.theme==='light'||CFG.theme==='dark')el.setAttribute('data-theme',CFG.theme);else el.removeAttribute('data-theme');
+  el.style.setProperty('--felt',c[0]);el.style.setProperty('--felt-ink',c[1]);
+  document.getElementById('app').style.zoom=CFG.size==='g'?'1.12':CFG.size==='xg'?'1.25':'';
+  if(CFG.wake)wake();else if(WL){try{WL.release()}catch(e){}WL=null}
+}
+function wake(){
+  if(!CFG.wake||!navigator.wakeLock||document.visibilityState!=='visible')return;
+  navigator.wakeLock.request('screen').then(function(l){WL=l},function(){});
+}
+document.addEventListener('visibilitychange',wake);
+if(MQ&&MQ.addEventListener)MQ.addEventListener('change',applySettings);
+function nav(tab){
+  var b=function(to,label,cur){return '<button data-act="go" data-to="'+to+'" aria-current="'+cur+'">'+label+'</button>'};
+  if(VIEW)return '<nav class="tabs">'+b('game','Partida',tab!=='settings')+b('settings','Ajustes',tab==='settings')+'</nav>';
+  return '<nav class="tabs">'+b('home','Partidas',tab==='home')+b('players','Jugadores ('+S.players.length+')',tab==='players')+b('settings','Ajustes',tab==='settings')+'</nav>';
+}
+function settingsView(){
+  var opt=function(k,v,label,extra){return '<button class="chip" data-act="set" data-k="'+k+'" data-v="'+v+'" aria-pressed="'+(String(CFG[k])===v)+'">'+(extra||'')+label+'</button>'};
+  var h='<div class="card"><h2>Apariencia</h2>';
+  h+='<div class="field"><span class="lbl">Tema</span><div class="chips">'+opt('theme','auto','Automático')+opt('theme','light','Claro')+opt('theme','dark','Oscuro')+'</div></div>';
+  h+='<div class="field"><span class="lbl">Color principal</span><div class="chips">';
+  for(var k in ACC)h+=opt('accent',k,ACC[k].n,'<span class="dot" style="background:'+(isDark()?ACC[k].d[0]:ACC[k].l[0])+'"></span>');
+  h+='</div></div>';
+  h+='<div class="field"><span class="lbl">Tamaño de letra</span><div class="chips">'+opt('size','n','Normal')+opt('size','g','Grande')+opt('size','xg','Muy grande')+'</div></div></div>';
+  h+='<div class="card"><h2>Durante la partida</h2>';
+  h+='<div class="field"><span class="lbl">Pantalla siempre encendida</span>'+(navigator.wakeLock?'<div class="chips">'+opt('wake','true','Sí')+opt('wake','false','No')+'</div>':'<span class="muted">Este navegador no lo permite.</span>')+'</div>';
+  if(!VIEW)h+='<div class="field"><span class="lbl">Phase 10: fases al crear una partida</span><div class="chips">'+opt('pmode','orig','Originales')+opt('pmode','new','Nuevas al azar')+'</div></div>';
+  return h+'</div><p class="muted">Estos ajustes se guardan solo en este celular.</p>';
+}
 function header(){
-  var tab=V.screen==='players'?'players':'home';
+  var tab=V.screen==='players'?'players':V.screen==='settings'?'settings':'home';
   return '<div class="top"><svg width="30" height="52" viewBox="0 0 30 52" aria-hidden="true"><rect x="1.5" y="1.5" width="27" height="49" rx="5" fill="var(--surface)" stroke="var(--ink)" stroke-width="3"/><line x1="6" y1="26" x2="24" y2="26" stroke="var(--ink)" stroke-width="2"/><circle cx="9" cy="8.5" r="2.6" fill="var(--ink)"/><circle cx="21" cy="8.5" r="2.6" fill="var(--ink)"/><circle cx="15" cy="14" r="2.6" fill="var(--ink)"/><circle cx="9" cy="19.5" r="2.6" fill="var(--ink)"/><circle cx="21" cy="19.5" r="2.6" fill="var(--ink)"/><circle cx="9" cy="33" r="2.6" fill="var(--felt)"/><circle cx="21" cy="45" r="2.6" fill="var(--felt)"/></svg><h1>Anotador de Juegos</h1></div>'+
-  (VIEW?'':'<nav class="tabs"><button data-act="go" data-to="home" aria-current="'+(tab==='home')+'">Partidas</button><button data-act="go" data-to="players" aria-current="'+(tab==='players')+'">Jugadores ('+S.players.length+')</button></nav>')+(syncText()?'<div class="muted" id="sync" style="margin-top:-8px">'+esc(syncText())+'</div>':'');
+  nav(tab)+(syncText()?'<div class="muted" id="sync" style="margin-top:-8px">'+esc(syncText())+'</div>':'');
 }
 function home(){
   var h='<button class="btn primary big" data-act="new">Nueva partida</button>';
@@ -458,16 +503,16 @@ function confirmView(){
 function render(){
   document.body.classList.toggle('ro',RO);
   if(!S){document.getElementById('app').innerHTML='<div class="top"><h1>Anotador de Juegos</h1></div><p class="muted" id="sync">'+esc(syncText()||'Cargando…')+'</p>';return}
-  var body=V.screen==='players'?playersView():V.screen==='new'?newView():V.screen==='game'?gameView():home();
+  var body=V.screen==='settings'?settingsView():V.screen==='players'?playersView():V.screen==='new'?newView():V.screen==='game'?gameView():home();
   document.getElementById('app').innerHTML=header()+body+(V.sheet?sheetView():'')+(V.confirm?confirmView():'');
 }
 function ask(msg,label,fn){V.confirm={msg:msg,label:label,fn:fn};render()}
-function newDraft(pid){var p=PRESETS.find(function(x){return x.id===pid});return {preset:p.id,name:p.name,win:p.win,target:p.target?String(p.target):'',sel:[],pmode:'orig'}}
+function newDraft(pid){var p=PRESETS.find(function(x){return x.id===pid});return {preset:p.id,name:p.name,win:p.win,target:p.target?String(p.target):'',sel:[],pmode:CFG.pmode==='new'?'new':'orig'}}
 
 /* ---------- acciones ---------- */
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-act]');if(!t)return;
-  if(RO)return;
+  if(RO&&t.dataset.act!=='go'&&t.dataset.act!=='set')return;
   var a=t.dataset.act,g=game(),d=V.draft;
   if(a==='closesheet'){if(t.dataset.force||e.target===t){V.sheet=null;render()}return}
   if(a==='go'){V.screen=t.dataset.to;V.sheet=null;render();window.scrollTo(0,0)}
@@ -498,6 +543,10 @@ document.addEventListener('click',function(e){
     if(g.rounds.length)ask('¿Cambiar las 10 fases a media partida? Los avances se conservan.','Cambiar',doNew);else{doNew();render()}
   }
   else if(a==='origphases'){delete g.pset;save();render()}
+  else if(a==='set'){
+    var sk=t.dataset.k,sv=t.dataset.v;
+    if(sk in CFG){CFG[sk]=sk==='wake'?sv==='true':sv;try{localStorage.setItem(CKEY,JSON.stringify(CFG))}catch(err){}applySettings();render()}
+  }
   else if(a==='install'){var ev=INSTALL;INSTALL=null;try{ev.prompt()}catch(err){}render()}
   else if(a==='copy'){
     var url=t.dataset.url,done=function(){t.textContent='Enlace copiado'},fail=function(){t.textContent=url};
@@ -550,6 +599,7 @@ var INSTALL=null;
 window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();INSTALL=e;if(S&&V.screen==='home'&&!V.confirm)render()});
 window.addEventListener('appinstalled',function(){INSTALL=null;if(S&&V.screen==='home'&&!V.confirm)render()});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
+applySettings();
 S=load();
 connect();
 })();
