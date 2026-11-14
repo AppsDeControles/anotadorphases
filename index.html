@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anotador de Juegos</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#c62828">
+<meta name="theme-color" id="tc" content="#0e1b15">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -299,7 +299,7 @@ var ACC={
   naranja:{n:'Naranja',l:['#c2560c','#ffffff'],d:['#f59a4a','#1f0e00']},
   rosa:{n:'Rosa',l:['#c2327a','#ffffff'],d:['#f07fb5','#24061a']}
 };
-var CKEY='anotador-ajustes-v1',CFG={theme:'auto',accent:'verde',size:'n',wake:false,pmode:'orig'},WL=null;
+var CKEY='anotador-ajustes-v1',CFG={theme:'auto',accent:'verde',size:'n',wake:false,pmode:'orig',bars:'fondo'},WL=null;
 try{var cj=JSON.parse(localStorage.getItem(CKEY)||'{}');for(var ck in CFG)if(typeof cj[ck]===typeof CFG[ck])CFG[ck]=cj[ck]}catch(e){}
 if(!ACC[CFG.accent])CFG.accent='verde';
 var MQ=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
@@ -308,6 +308,7 @@ function applySettings(){
   var el=document.documentElement,a=ACC[CFG.accent],c=isDark()?a.d:a.l;
   if(CFG.theme==='light'||CFG.theme==='dark')el.setAttribute('data-theme',CFG.theme);else el.removeAttribute('data-theme');
   el.style.setProperty('--felt',c[0]);el.style.setProperty('--felt-ink',c[1]);
+  var tc=document.getElementById('tc');if(tc)tc.setAttribute('content',CFG.bars==='color'?c[0]:(isDark()?'#0e1b15':'#edf1ec'));
   document.getElementById('app').style.zoom=CFG.size==='g'?'1.12':CFG.size==='xg'?'1.25':'';
   if(CFG.wake)wake();else if(WL){try{WL.release()}catch(e){}WL=null}
 }
@@ -329,6 +330,7 @@ function settingsView(){
   h+='<div class="field"><span class="lbl">Color principal</span><div class="chips">';
   for(var k in ACC)h+=opt('accent',k,ACC[k].n,'<span class="dot" style="background:'+(isDark()?ACC[k].d[0]:ACC[k].l[0])+'"></span>');
   h+='</div></div>';
+  h+='<div class="field"><span class="lbl">Barras del celular (arriba y abajo)</span><div class="chips">'+opt('bars','fondo','Igual al fondo')+opt('bars','color','Color principal')+'</div></div>';
   h+='<div class="field"><span class="lbl">Tamaño de letra</span><div class="chips">'+opt('size','n','Normal')+opt('size','g','Grande')+opt('size','xg','Muy grande')+'</div></div></div>';
   h+='<div class="card"><h2>Durante la partida</h2>';
   h+='<div class="field"><span class="lbl">Pantalla siempre encendida</span>'+(navigator.wakeLock?'<div class="chips">'+opt('wake','true','Sí')+opt('wake','false','No')+'</div>':'<span class="muted">Este navegador no lo permite.</span>')+'</div>';
