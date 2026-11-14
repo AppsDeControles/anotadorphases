@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anotador de Juegos</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c62828">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Anotador">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -291,6 +297,7 @@ function header(){
 }
 function home(){
   var h='<button class="btn primary big" data-act="new">Nueva partida</button>';
+  if(INSTALL)h+='<button class="btn" data-act="install">Instalar la app en este celular</button>';
   if(!S.games.length)return h+'<p class="muted">'+(RO?'Esta partida no existe o ya fue borrada. Pide un enlace nuevo a quien anota.':'Todavía no hay partidas. Empieza una arriba.')+'</p>';
   h+='<div class="list">';
   S.games.slice().reverse().forEach(function(g){
@@ -491,6 +498,7 @@ document.addEventListener('click',function(e){
     if(g.rounds.length)ask('¿Cambiar las 10 fases a media partida? Los avances se conservan.','Cambiar',doNew);else{doNew();render()}
   }
   else if(a==='origphases'){delete g.pset;save();render()}
+  else if(a==='install'){var ev=INSTALL;INSTALL=null;try{ev.prompt()}catch(err){}render()}
   else if(a==='copy'){
     var url=t.dataset.url,done=function(){t.textContent='Enlace copiado'},fail=function(){t.textContent=url};
     try{navigator.clipboard.writeText(url).then(done,fail)}catch(err){fail()}
@@ -538,6 +546,10 @@ document.addEventListener('change',function(e){
   if(t.dataset.rename&&!RO){var p=S.players.find(function(x){return x.id===t.dataset.rename}),v=t.value.trim();if(p&&v){p.name=v;save()}else if(p){t.value=p.name}}
 });
 
+var INSTALL=null;
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();INSTALL=e;if(S&&V.screen==='home'&&!V.confirm)render()});
+window.addEventListener('appinstalled',function(){INSTALL=null;if(S&&V.screen==='home'&&!V.confirm)render()});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
 S=load();
 connect();
 })();
