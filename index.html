@@ -128,6 +128,10 @@ a.btn{display:block;text-align:center;text-decoration:none;color:inherit}
 a.btn.wa{border-color:var(--felt);color:var(--felt)}
 .mine{font-family:var(--display);font-weight:800;font-size:30px;line-height:1.05;text-transform:uppercase}
 .chip .dot{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid var(--surface);margin-right:7px;vertical-align:-2px}
+.lives{font-size:34px;line-height:1;letter-spacing:3px;white-space:nowrap}
+.lives .on{color:var(--bad)}
+.lives .off{color:var(--line)}
+.p.outp .who,.p.outp .pos{opacity:.5}
 .center{align-items:center}
 .center .sheet{border-radius:20px;margin:16px}
 @media (prefers-reduced-motion:no-preference){ .sheet{animation:up .18s ease-out} @keyframes up{from{transform:translateY(16px)}to{transform:none}} }
@@ -163,6 +167,7 @@ var PRESETS=[
  {id:'hearts',name:'Corazones',win:'low',target:100,note:'Termina cuando alguien llega a la meta. Gana el de menos puntos.'},
  {id:'diezmil',name:'10,000',win:'high',target:10000,note:'Dados acumulados hasta la meta.'},
  {id:'bet',name:'Wizard / Podrida',win:'high',target:null,bet:true,note:'Cada quien apuesta sus bazas. Si acierta: 20 + 10 por baza. Si falla: −10 por cada baza de diferencia.'},
+ {id:'viuda',name:'Viuda',win:'high',target:null,viuda:true,note:'Cada ronda pierde un jugador. Todos empiezan con 2 vidas y hay una sola vida extra (la viuda) que puede comprar quien se quede sin vidas. El comodín cambia cada ronda. Gana el último con vida.'},
  {id:'libre',name:'Otro juego',win:'high',target:null,note:'Tú decides cómo se gana y si hay meta.'}
 ];
 var ORIG=['2 tercias','1 tercia + corrida de 4','4 iguales + corrida de 4','Corrida de 7','Corrida de 8','Corrida de 9','2 grupos de 4 iguales','7 cartas de un color','5 iguales + 1 par','5 iguales + 1 tercia'];
@@ -262,13 +267,19 @@ function seed(){
 function game(){return S.games.find(function(g){return g.id===V.gameId})}
 function pname(g,pid){var p=S.players.find(function(p){return p.id===pid});if(p)return p.name;var q=g.players.find(function(p){return p.id===pid});return q?q.name:'?'}
 function rpts(g,r,pid){
-  if(g.phases)return 0;
+  if(g.phases||g.viuda)return 0;
   if(g.bet){var b=(r.bids&&r.bids[pid])||0,w=(r.won&&r.won[pid])||0;return b===w?20+10*w:-10*Math.abs(b-w)}
   return (r.scores&&r.scores[pid])||0;
 }
 function total(g,pid){return g.rounds.reduce(function(a,r){return a+rpts(g,r,pid)},0)}
 function phDone(g,pid,skip){return g.rounds.filter(function(r,i){return i!==skip&&r.done&&r.done[pid]}).length}
 function standing(g){
+  if(g.viuda){
+    var vs=vstate(g),vr=g.players.map(function(p){return {id:p.id,name:pname(g,p.id),total:vs.lives[p.id],ph:0,o:(p.id in vs.out)?vs.out[p.id]:1e9}});
+    vr.sort(function(a,b){return b.o-a.o});
+    vr.forEach(function(r,i){r.pos=(i>0&&vr[i-1].o===r.o)?vr[i-1].pos:i+1});
+    return vr;
+  }
   var rows=g.players.map(function(p){return {id:p.id,name:pname(g,p.id),total:total(g,p.id),ph:g.phases?Math.min(10,phDone(g,p.id)):0}});
   var cmp=function(a,b){return g.phases?(b.ph-a.ph):(g.win==='low'?a.total-b.total:b.total-a.total)};
   rows.sort(cmp);
@@ -276,6 +287,7 @@ function standing(g){
   return rows;
 }
 function isOver(g){
+  if(g.viuda)return g.rounds.length>0&&vstate(g).alive.length<=1;
   if(g.ended)return true;
   if(g.phases)return g.players.some(function(p){return phDone(g,p.id)>=10});
   if(g.target)return g.players.some(function(p){return total(g,p.id)>=g.target});
@@ -284,6 +296,7 @@ function isOver(g){
 function winners(g){return standing(g).filter(function(r){return r.pos===1}).map(function(r){return r.name})}
 function joinNames(a){return a.length<2?a.join(''):a.slice(0,-1).join(', ')+' y '+a[a.length-1]}
 function rule(g){
+  if(g.viuda)return 'Cada ronda pierde uno · 2 vidas por jugador · gana el último con vida';
   if(g.phases)return 'Gana quien termina primero la fase 10';
   if(g.bet)return 'Apuestas: 20 + 10 por baza si aciertas, −10 por baza de diferencia si fallas';
   var w=g.win==='low'?'Gana el de menos puntos':'Gana el de más puntos';
@@ -376,7 +389,7 @@ function newView(){
   PRESETS.forEach(function(p){h+='<button class="chip" data-act="preset" data-id="'+p.id+'" aria-pressed="'+(p.id===d.preset)+'">'+esc(p.name)+'</button>'});
   h+='</div><p class="muted" style="margin:0">'+esc(pr.note)+'</p>';
   h+='<div class="field"><label for="gname">Nombre de la partida</label><input type="text" id="gname" data-draft="name" maxlength="30" value="'+esc(d.name)+'"></div>';
-  if(!pr.phases&&!pr.bet){
+  if(!pr.phases&&!pr.bet&&!pr.viuda){
     h+='<div class="field"><span class="lbl">Cómo se gana</span><div class="chips"><button class="chip" data-act="win" data-id="high" aria-pressed="'+(d.win==='high')+'">Más puntos</button><button class="chip" data-act="win" data-id="low" aria-pressed="'+(d.win==='low')+'">Menos puntos</button></div></div>';
     h+='<div class="field"><label for="gtarget">Meta de puntos (vacío si no hay)</label><input type="text" inputmode="numeric" id="gtarget" data-draft="target" value="'+esc(d.target)+'"></div>';
   }
@@ -391,8 +404,100 @@ function newView(){
   h+='<button class="btn primary big" data-act="start"'+(d.sel.length<2?' disabled style="opacity:.5"':'')+'>'+(d.sel.length<2?'Elige al menos 2 jugadores':'Empezar con '+d.sel.length+' jugadores')+'</button>';
   return h;
 }
+/* ---------- Viuda ---------- */
+function vstate(g,upto){
+  var order=g.players.map(function(p){return p.id}),lives={},out={},owner=null,N=order.length;
+  order.forEach(function(id){lives[id]=2});
+  var alive=function(id){return !(id in out)};
+  var next=function(id){var i=order.indexOf(id);for(var k=1;k<=N;k++){var c=order[(i+k)%N];if(alive(c))return c}return id};
+  var n=upto==null?g.rounds.length:upto,deal=order[N-1];
+  for(var r=0;r<=n;r++){
+    if(r>0)deal=next(deal);
+    if(g.vd&&g.vd.n===r&&(g.vd.id in lives)&&alive(g.vd.id))deal=g.vd.id;
+    if(r===n)break;
+    var rd=g.rounds[r],L=rd?rd.loser:null;
+    if(L!=null&&(L in lives)&&alive(L)){lives[L]--;if(lives[L]<=0){if(rd.bought&&!owner){owner=L;lives[L]=1}else out[L]=r}}
+  }
+  var hand=next(deal);
+  if(g.vh&&g.vh.n===n&&(g.vh.id in lives)&&alive(g.vh.id))hand=g.vh.id;
+  return {lives:lives,out:out,owner:owner,deal:deal,hand:hand,alive:order.filter(alive)};
+}
+function wild(n){var w=n%14;if(!w)return null;return w===1?'los 1 (ases)':w===11?'las J':w===12?'las Q':w===13?'las K':'los '+w}
+function shareCard(g){
+  if(RO||g.example)return '';
+  var h='<div class="card"><h2>Compartir en modo vista</h2>';
+  if(MODE==='owner'){
+    var base=location.origin+location.pathname+'?v='+g.id;
+    h+='<p class="muted" style="margin:0">Manda a cada jugador su enlace. Solo podrán ver la partida, no cambiarla.</p><div class="list">';
+    g.players.forEach(function(p){
+      var nm=pname(g,p.id),msg=nm+', sigue aquí la partida de '+g.name+': '+base+'&j='+p.id;
+      h+='<a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(msg)+'">Enviar a '+esc(nm)+' por WhatsApp</a>';
+    });
+    h+='</div><button class="btn" data-act="copy" data-url="'+esc(base)+'">Copiar enlace general</button>';
+  }else h+='<p class="muted" style="margin:0">'+(FBOK?'Conectando con la nube…':'Para compartir falta la configuración de Firebase.')+'</p>';
+  return h+'</div>';
+}
+function viudaView(g){
+  var n=g.rounds.length,st=vstate(g),over=isOver(g),w=wild(n);
+  var h=VIEW?'':'<button class="btn ghost small" data-act="go" data-to="home" style="align-self:flex-start">‹ Partidas</button>';
+  h+='<div><div style="font-family:var(--display);font-weight:800;font-size:34px;line-height:1;text-transform:uppercase">'+esc(g.name)+'</div><div class="muted" style="margin-top:6px">'+esc(rule(g))+'</div></div>';
+  if(over)h+='<div class="banner">Ganó '+esc(pname(g,st.alive[0]))+'</div>';
+  else h+='<div class="card" style="gap:6px"><h2>Ronda '+(n+1)+'</h2><div class="mine">'+(w?'Comodín: '+w:'Sin comodín')+'</div><div>Reparte <strong>'+esc(pname(g,st.deal))+'</strong> · tiene la mano <strong>'+esc(pname(g,st.hand))+'</strong></div><div class="muted">'+(st.owner?'La viuda ya la compró '+esc(pname(g,st.owner)):'La viuda (vida extra) sigue disponible')+'</div><button class="btn small" data-act="vturn" style="align-self:flex-start;margin-top:8px">Cambiar quién reparte o tiene la mano</button></div>';
+  if(VIEW&&ME&&st.lives[ME]!=null){
+    var ml=st.lives[ME];
+    h+='<div class="card" style="gap:6px"><h2>'+esc(pname(g,ME))+', tus vidas</h2><div class="mine">'+((ME in st.out)?'Quedaste eliminado':over?'Ganaste':'Te queda'+(ml===1?' 1 vida':'n '+ml+' vidas'))+'</div></div>';
+  }
+  h+='<div class="card"><div class="stand">';
+  g.players.forEach(function(p,k){
+    var id=p.id,dead=id in st.out,max=2+(st.owner===id?1:0),lv=Math.max(0,st.lives[id]),tag='',hearts='';
+    if(VIEW&&id===ME)tag+='<span class="tag live">Tú</span>';
+    if(!over&&!dead){if(id===st.hand)tag+='<span class="tag tok">Mano</span>';if(id===st.deal)tag+='<span class="tag tok">Reparte</span>'}
+    if(st.owner===id)tag+='<span class="tag lead">Viuda</span>';
+    if(dead)tag+='<span class="tag">Eliminado en ronda '+(st.out[id]+1)+'</span>';
+    for(var x=0;x<max;x++)hearts+='<span class="'+(x<lv?'on':'off')+'">♥</span>';
+    h+='<div class="p'+(dead?' outp':'')+'"><span class="pos">'+(k+1)+'</span><span class="who">'+esc(pname(g,id))+tag+'</span><span class="lives" aria-label="'+lv+' vidas">'+hearts+'</span></div>';
+  });
+  h+='</div></div>';
+  if(!over)h+='<button class="btn primary big" data-act="vround">Anotar quién perdió la ronda '+(n+1)+'</button>';
+  else h+='<div class="row acts"><button class="btn primary grow" data-act="rematch">Revancha</button></div>';
+  h+=shareCard(g);
+  if(n){
+    h+='<div class="card"><h2>Rondas</h2><ol class="phl">';
+    g.rounds.forEach(function(r,i){
+      var b=vstate(g,i),res=b.lives[r.loser]>1?'perdió una vida':(r.bought&&!b.owner)?'compró la viuda':'quedó eliminado',wl=wild(i);
+      h+='<li><b>'+(i+1)+'</b><span>'+esc(pname(g,r.loser))+' '+res+'<small class="muted" style="display:block;font-weight:400">'+(wl?'Comodín: '+wl:'Sin comodín')+'</small></span>'+(i===n-1?'<button class="btn small" data-act="vround" data-i="'+i+'">Editar</button>':'')+'</li>';
+    });
+    h+='</ol><p class="muted" style="margin:0">Solo se puede corregir la última ronda.</p></div>';
+  }
+  return h;
+}
+function viudaSheet(){
+  var g=game(),sh=V.sheet,ed=sh.i!=null,b=vstate(g,ed?sh.i:g.rounds.length);
+  var h='<div class="veil" data-act="closesheet"><div class="sheet"><h3>¿Quién perdió la ronda '+((ed?sh.i:g.rounds.length)+1)+'?</h3><div class="chips">';
+  b.alive.forEach(function(id){h+='<button class="chip" data-act="vlose" data-id="'+id+'" aria-pressed="'+(sh.loser===id)+'">'+esc(pname(g,id))+'</button>'});
+  h+='</div>';
+  if(sh.loser&&b.lives[sh.loser]!=null){
+    var nm=esc(pname(g,sh.loser));
+    if(b.lives[sh.loser]>1)h+='<p style="margin:0">A '+nm+' le queda '+(b.lives[sh.loser]-1===1?'1 vida':(b.lives[sh.loser]-1)+' vidas')+'.</p>';
+    else if(!b.owner)h+='<div class="field"><span class="lbl">'+nm+' se quedó sin vidas. ¿Compra la viuda?</span><div class="chips"><button class="chip" data-act="vbuy" data-v="1" aria-pressed="'+(sh.bought===true)+'">Sí, compra la vida extra</button><button class="chip" data-act="vbuy" data-v="0" aria-pressed="'+(sh.bought!==true)+'">No, queda eliminado</button></div></div>';
+    else h+='<p style="margin:0">'+nm+' se quedó sin vidas y la viuda ya está comprada: queda eliminado.</p>';
+  }
+  h+='<div class="row"><button class="btn primary grow" style="flex:2'+(sh.loser?'':';opacity:.5')+'" data-act="vsave">Guardar ronda</button><button class="btn grow" data-act="closesheet" data-force="1">Cancelar</button></div>';
+  if(ed)h+='<button class="btn danger" data-act="delround">Borrar esta ronda</button>';
+  return h+'</div></div>';
+}
+function vturnSheet(){
+  var g=game(),st=vstate(g);
+  var grp=function(act,cur){var x='<div class="chips">';st.alive.forEach(function(id){x+='<button class="chip" data-act="'+act+'" data-id="'+id+'" aria-pressed="'+(id===cur)+'">'+esc(pname(g,id))+'</button>'});return x+'</div>'};
+  return '<div class="veil" data-act="closesheet"><div class="sheet"><h3>Ronda '+(g.rounds.length+1)+'</h3>'+
+    '<div class="field"><span class="lbl">Reparte</span>'+grp('vdeal',st.deal)+'</div>'+
+    '<div class="field"><span class="lbl">Tiene la mano</span>'+grp('vhand',st.hand)+'</div>'+
+    '<p class="muted" style="margin:0">La mano pasa sola al siguiente jugador vivo después de quien reparte. Las siguientes rondas siguen rotando desde aquí, saltando a los eliminados.</p>'+
+    '<button class="btn primary big" data-act="closesheet" data-force="1">Listo</button></div></div>';
+}
 function gameView(){
   var g=game();if(!g){V.screen='home';return home()}
+  if(g.viuda)return viudaView(g);
   var over=isOver(g),st=standing(g),n=g.rounds.length;
   var h=VIEW?'':'<button class="btn ghost small" data-act="go" data-to="home" style="align-self:flex-start">‹ Partidas</button>';
   h+='<div><div style="font-family:var(--display);font-weight:800;font-size:34px;line-height:1;text-transform:uppercase">'+esc(g.name)+(g.example?' <span class="tag" style="vertical-align:middle;font-family:var(--body)">Ejemplo</span>':'')+'</div><div class="muted" style="margin-top:6px">'+esc(rule(g))+'</div></div>';
@@ -477,6 +582,8 @@ function turnSheet(){
 }
 function sheetView(){
   if(V.sheet.turn)return turnSheet();
+  if(V.sheet.v)return viudaSheet();
+  if(V.sheet.vturn)return vturnSheet();
   var g=game(),i=V.sheet.i,ed=i!=null,r=ed?g.rounds[i]:{};
   var h='<div class="veil" data-act="closesheet"><form class="sheet" data-form="round"><h3>'+(ed?'Editar ronda '+(i+1):'Ronda '+(g.rounds.length+1))+'</h3>';
   if(g.phases)h+='<p class="muted" style="margin:0">Marca a quien completó su fase en esta ronda.</p>';
@@ -526,7 +633,7 @@ document.addEventListener('click',function(e){
   else if(a==='start'){
     if(d.sel.length<2)return;
     var p=PRESETS.find(function(x){return x.id===d.preset}),tg=num(d.target);
-    var ng={id:uid()+uid(),name:(d.name||'').trim()||p.name,preset:p.id,win:p.phases?'low':p.bet?'high':d.win,target:(p.phases||p.bet||tg<=0)?null:tg,phases:!!p.phases,bet:!!p.bet,ended:false,rounds:[],
+    var ng={id:uid()+uid(),name:(d.name||'').trim()||p.name,preset:p.id,win:p.phases?'low':p.bet?'high':d.win,target:(p.phases||p.bet||p.viuda||tg<=0)?null:tg,phases:!!p.phases,bet:!!p.bet,viuda:!!p.viuda,ended:false,rounds:[],
       players:d.sel.map(function(id){var q=S.players.find(function(x){return x.id===id});return {id:id,name:q?q.name:'?'}})};
     if(ng.phases&&d.pmode==='new')ng.pset=newSet();
     S.games.push(ng);save();V.gameId=ng.id;V.screen='game';render();window.scrollTo(0,0);
@@ -545,6 +652,18 @@ document.addEventListener('click',function(e){
     if(g.rounds.length)ask('¿Cambiar las 10 fases a media partida? Los avances se conservan.','Cambiar',doNew);else{doNew();render()}
   }
   else if(a==='origphases'){delete g.pset;save();render()}
+  else if(a==='vround'){var vi=t.dataset.i!=null?+t.dataset.i:null,vr=vi!=null?g.rounds[vi]:null;V.sheet={v:true,i:vi,loser:vr?vr.loser:null,bought:vr?!!vr.bought:false};render()}
+  else if(a==='vlose'){V.sheet.loser=t.dataset.id;V.sheet.bought=false;render()}
+  else if(a==='vbuy'){V.sheet.bought=t.dataset.v==='1';render()}
+  else if(a==='vsave'){
+    if(!V.sheet.loser)return;
+    var nr={loser:V.sheet.loser,bought:!!V.sheet.bought};
+    if(V.sheet.i!=null)g.rounds[V.sheet.i]=nr;else g.rounds.push(nr);
+    V.sheet=null;save();render();
+  }
+  else if(a==='vturn'){V.sheet={vturn:true};render()}
+  else if(a==='vdeal'){g.vd={n:g.rounds.length,id:t.dataset.id};delete g.vh;save();render()}
+  else if(a==='vhand'){g.vh={n:g.rounds.length,id:t.dataset.id};save();render()}
   else if(a==='set'){
     var sk=t.dataset.k,sv=t.dataset.v;
     if(sk in CFG){CFG[sk]=sk==='wake'?sv==='true':sv;try{localStorage.setItem(CKEY,JSON.stringify(CFG))}catch(err){}applySettings();render()}
@@ -559,7 +678,7 @@ document.addEventListener('click',function(e){
   else if(a==='end'){g.ended=true;save();render()}
   else if(a==='reopen'){g.ended=false;save();render()}
   else if(a==='rematch'){
-    var c={id:uid()+uid(),name:g.name,preset:g.preset,win:g.win,target:g.target,phases:g.phases,bet:g.bet,ended:false,rounds:[],players:g.players.map(function(p){return {id:p.id,name:pname(g,p.id)}})};
+    var c={id:uid()+uid(),name:g.name,preset:g.preset,win:g.win,target:g.target,phases:g.phases,bet:g.bet,viuda:!!g.viuda,ended:false,rounds:[],players:g.players.map(function(p){return {id:p.id,name:pname(g,p.id)}})};
     if(g.pset)c.pset=g.pset.slice();
     S.games.push(c);save();V.gameId=c.id;render();window.scrollTo(0,0);
   }
