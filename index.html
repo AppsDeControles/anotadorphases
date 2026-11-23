@@ -162,12 +162,12 @@ var KEY='anotador-juegos-v1';
 var PRESETS=[
  {id:'domino',name:'Dominó',win:'high',target:100,note:'Se suma por mano. Termina cuando alguien llega a la meta.'},
  {id:'phase10',name:'Phase 10',win:'low',target:null,phases:true,note:'Solo se marca quién avanza de fase en cada ronda, sin sumar puntos. Una ficha indica quién tiene la mano y una baraja quién reparte. Gana quien termina primero la fase 10.'},
+ {id:'viuda',name:'Viuda',win:'high',target:null,viuda:true,note:'Cada ronda pierde un jugador. Todos empiezan con 2 vidas y hay una sola vida extra (la viuda) que puede comprar quien se quede sin vidas. El comodín cambia cada ronda. Gana el último con vida.'},
  {id:'uno',name:'Uno',win:'high',target:500,note:'Quien gana la mano suma las cartas de los demás. Termina al llegar a la meta.'},
  {id:'rummy',name:'Rummy / Continental',win:'low',target:null,note:'Se anota lo que te quedó en la mano. Gana el de menos puntos.'},
  {id:'hearts',name:'Corazones',win:'low',target:100,note:'Termina cuando alguien llega a la meta. Gana el de menos puntos.'},
  {id:'diezmil',name:'10,000',win:'high',target:10000,note:'Dados acumulados hasta la meta.'},
  {id:'bet',name:'Wizard / Podrida',win:'high',target:null,bet:true,note:'Cada quien apuesta sus bazas. Si acierta: 20 + 10 por baza. Si falla: −10 por cada baza de diferencia.'},
- {id:'viuda',name:'Viuda',win:'high',target:null,viuda:true,note:'Cada ronda pierde un jugador. Todos empiezan con 2 vidas y hay una sola vida extra (la viuda) que puede comprar quien se quede sin vidas. El comodín cambia cada ronda. Gana el último con vida.'},
  {id:'libre',name:'Otro juego',win:'high',target:null,note:'Tú decides cómo se gana y si hay meta.'}
 ];
 var ORIG=['2 tercias','1 tercia + corrida de 4','4 iguales + corrida de 4','Corrida de 7','Corrida de 8','Corrida de 9','2 grupos de 4 iguales','7 cartas de un color','5 iguales + 1 par','5 iguales + 1 tercia'];
@@ -348,7 +348,7 @@ function settingsView(){
   h+='<div class="card"><h2>Durante la partida</h2>';
   h+='<div class="field"><span class="lbl">Pantalla siempre encendida</span>'+(navigator.wakeLock?'<div class="chips">'+opt('wake','true','Sí')+opt('wake','false','No')+'</div>':'<span class="muted">Este navegador no lo permite.</span>')+'</div>';
   if(!VIEW)h+='<div class="field"><span class="lbl">Phase 10: fases al crear una partida</span><div class="chips">'+opt('pmode','orig','Originales')+opt('pmode','new','Nuevas al azar')+'</div></div>';
-  return h+'</div><p class="muted">Estos ajustes se guardan solo en este celular.</p>';
+  return h+'</div><p class="muted">Estos ajustes se guardan solo en este celular.</p><p class="muted">Versión 1.6 · incluye Viuda</p>';
 }
 function header(){
   var tab=V.screen==='players'?'players':V.screen==='settings'?'settings':'home';

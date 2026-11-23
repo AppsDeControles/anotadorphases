@@ -1,5 +1,5 @@
 // Anotador de Juegos: permite instalar la app y abrirla sin conexión.
-var CACHE = 'anotador-v1';
+var CACHE = 'anotador-v2';
 self.addEventListener('install', function (e) {
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(function (c) {
