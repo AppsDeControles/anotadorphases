@@ -11,7 +11,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Anotador">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;600;700&display=swap"></noscript>
 <style>
 /* Plan: libreta de anotar sobre mesa de fieltro. Una columna angosta para celular,
    totales en números grandes tipo marcador, verde fieltro para acciones y
@@ -139,9 +140,6 @@ a.btn.wa{border-color:var(--felt);color:var(--felt)}
 </head>
 <body>
 <div id="app"></div>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
 /* ====== PEGA AQUÍ LA CONFIGURACIÓN DE TU PROYECTO DE FIREBASE ======
    Debe incluir databaseURL. Mientras esté vacía, el anotador funciona
@@ -194,7 +192,20 @@ function fmt(n){return (n<0?'−':'')+Math.abs(n).toLocaleString('es-MX')}
 function num(v){var n=parseInt(String(v).replace(/[^\d-]/g,''),10);return isNaN(n)?0:n}
 function load(){try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.players&&o.games)return o}}catch(e){}return null}
 var RO=false,MODE='boot',DB=null,UID=null,SYNC='',VIEW=null,ME=null,pushed={},busy={},again={};
-var FBOK=!!(window.firebase&&window.firebaseConfig&&firebaseConfig.apiKey&&firebaseConfig.databaseURL);
+var FBOK=!!(window.firebaseConfig&&firebaseConfig.apiKey&&firebaseConfig.databaseURL);
+var FBV='https://www.gstatic.com/firebasejs/10.12.2/firebase-';
+/* Firebase se carga después de mostrar la app, para que abra al instante con lo guardado en el celular. */
+function loadFirebase(parts,cb){
+  if(window.firebase&&firebase.apps&&firebase.apps.length){cb(true);return}
+  var list=['app'].concat(parts),i=0;
+  (function next(){
+    if(i>=list.length){try{if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);cb(true)}catch(e){cb(false)}return}
+    var el=document.createElement('script');el.src=FBV+list[i++]+'-compat.js';
+    el.onload=next;el.onerror=function(){cb(false)};
+    document.head.appendChild(el);
+  })();
+}
+var VKEY='anotador-vista-';
 function save(){
   if(RO)return;
   delete S.seed;S.t=Date.now();
@@ -234,29 +245,46 @@ function connect(){
   var q=new URLSearchParams(location.search),v=q.get('v'),me=q.get('j'),okId=/^[A-Za-z0-9_-]{5,40}$/;
   if(v){
     VIEW=okId.test(v)?v:'x';ME=me&&okId.test(me)?me:null;
-    MODE='viewer';RO=true;S=null;render();
-    if(!FBOK||VIEW==='x'){SYNC='err';S={players:[],games:[]};render();return}
-    firebase.initializeApp(firebaseConfig);DB=firebase.database();
+    MODE='viewer';RO=true;S=null;
+    var showGame=function(g){
+      if(g&&Array.isArray(g.players)&&g.players.length&&Array.isArray(g.rounds)){g.id=VIEW;S={players:[],games:[g]};V.gameId=VIEW;if(V.screen!=='settings')V.screen='game';return true}
+      return false;
+    };
+    // Primero lo último que se vio en este celular, para que la partida aparezca de inmediato.
+    try{var cached=localStorage.getItem(VKEY+VIEW);if(cached)showGame(JSON.parse(cached))}catch(e){}
+    render();
+    if(!FBOK||VIEW==='x'){SYNC='err';if(!S)S={players:[],games:[]};render();return}
     var timer=setTimeout(function(){if(SYNC!=='live'){SYNC='slow';paintSync()}},10000);
-    DB.ref('partidas/'+VIEW+'/data').on('value',function(snap){
-      clearTimeout(timer);SYNC='live';
-      var g=null;try{g=JSON.parse(snap.val())}catch(e){}
-      if(g&&Array.isArray(g.players)&&g.players.length&&Array.isArray(g.rounds)){g.id=VIEW;S={players:[],games:[g]};V.gameId=VIEW;if(V.screen!=='settings')V.screen='game'}
-      else{S={players:[],games:[]};if(V.screen!=='settings')V.screen='home'}
-      render();
-    },function(){clearTimeout(timer);SYNC='err';if(!S)S={players:[],games:[]};render()});
+    loadFirebase(['database'],function(ok){
+      if(!ok){clearTimeout(timer);SYNC='err';if(!S)S={players:[],games:[]};render();return}
+      DB=firebase.database();
+      DB.ref('partidas/'+VIEW+'/data').on('value',function(snap){
+        clearTimeout(timer);SYNC='live';
+        var raw=snap.val(),g=null;try{g=JSON.parse(raw)}catch(e){}
+        if(showGame(g)){try{localStorage.setItem(VKEY+VIEW,raw)}catch(e){}}
+        else{S={players:[],games:[]};if(V.screen!=='settings')V.screen='home';try{localStorage.removeItem(VKEY+VIEW)}catch(e){}}
+        if(!V.sheet)render();else paintSync();
+      },function(){clearTimeout(timer);SYNC='err';if(!S)S={players:[],games:[]};render()});
+    });
     return;
   }
   if(!S){S=seed();S.seed=true}
   MODE='local';render();
   if(!FBOK)return;
-  firebase.initializeApp(firebaseConfig);DB=firebase.database();
-  firebase.auth().onAuthStateChanged(function(u){
-    if(!u)return;
-    UID=u.uid;MODE='owner';SYNC='ok';syncAll();
-    if(!V.sheet&&!V.confirm&&V.screen!=='new')render();else paintSync();
-  });
-  firebase.auth().signInAnonymously().catch(function(){});
+  // La nube se conecta en segundo plano; mientras tanto se anota con lo guardado en el celular.
+  var go=function(){
+    loadFirebase(['auth','database'],function(ok){
+      if(!ok)return;
+      DB=firebase.database();
+      firebase.auth().onAuthStateChanged(function(u){
+        if(!u)return;
+        UID=u.uid;MODE='owner';SYNC='ok';syncAll();
+        if(!V.sheet&&!V.confirm&&V.screen!=='new')render();else paintSync();
+      });
+      firebase.auth().signInAnonymously().catch(function(){});
+    });
+  };
+  if(window.requestIdleCallback)requestIdleCallback(go,{timeout:1500});else setTimeout(go,300);
 }
 function seed(){
   var a={id:uid(),name:'Chuy'},b={id:uid(),name:'Lupita'},c={id:uid(),name:'Beto'},d={id:uid(),name:'Mari'};
@@ -348,7 +376,7 @@ function settingsView(){
   h+='<div class="card"><h2>Durante la partida</h2>';
   h+='<div class="field"><span class="lbl">Pantalla siempre encendida</span>'+(navigator.wakeLock?'<div class="chips">'+opt('wake','true','Sí')+opt('wake','false','No')+'</div>':'<span class="muted">Este navegador no lo permite.</span>')+'</div>';
   if(!VIEW)h+='<div class="field"><span class="lbl">Phase 10: fases al crear una partida</span><div class="chips">'+opt('pmode','orig','Originales')+opt('pmode','new','Nuevas al azar')+'</div></div>';
-  return h+'</div><p class="muted">Estos ajustes se guardan solo en este celular.</p><p class="muted">Versión 1.6 · incluye Viuda</p>';
+  return h+'</div><p class="muted">Estos ajustes se guardan solo en este celular.</p><p class="muted">Versión 1.7 · arranque rápido</p>';
 }
 function header(){
   var tab=V.screen==='players'?'players':V.screen==='settings'?'settings':'home';
